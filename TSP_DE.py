@@ -10,150 +10,154 @@ matplotlib.rc('font', family='Microsoft YaHei')
 x_init = None
 score_init = 1e-9
 
-class Life(object):
+class Individual(object):
     """个体类"""
-    def __init__(self, x=None):
-        self.x = np.array(x)
-        self.gene = np.argsort(x)
-        self.score = score_init
+    def __init__(self, position=None):
+        self.position = np.array(position)
+        self.rank = np.argsort(position)
+        self.fitness = score_init
 
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
 
-# 2) 读取城市坐标（文件每行：城市名 \t x \t y）
+# 2) 读取城市坐标
 CITY_FILE = "D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\distanceMatrix.txt"
-citys = []
+cities = []
 with open(CITY_FILE, "r", encoding='utf-8') as f:
     for line in f:
         line = line.strip()
         if not line:
             continue
         name, x, y = line.split("\t")
-        citys.append((float(x), float(y), name))
+        cities.append((float(x), float(y), name))
 
 # 3) 定义超参数
-LIFE_COUNT = 120
+POPULATION_SIZE = 120
 MAX_GENERATIONS = 2000
-# MAX_GENERATIONS = 1
-Cr = 0.9
-# Cr = 0.0
-F = 0.6
-# F = 0.0
+CROSSOVER_RATE = 0.9
+SCALING_FACTOR = 0.6
+N_CITIES = len(cities)
 
-gene_length = len(citys)
+# 4) 预计算距离矩阵以提高效率
+def compute_distance_matrix():
+    """预计算所有城市间的距离矩阵"""
+    coordinates = np.array([(x, y) for x, y, _ in cities])
+    dx = coordinates[:, 0][:, None] - coordinates[:, 0]
+    dy = coordinates[:, 1][:, None] - coordinates[:, 1]
+    return np.sqrt(dx**2 + dy**2)
 
-# 4) 初始化种群
-lives = []
-base = list(range(gene_length))
-for i in range(LIFE_COUNT):
-    x = [random.random() for _ in range(gene_length)]
-    lives.append(Life(x))
+distance_matrix = compute_distance_matrix()
 
-# 5) 定义评估函数（回路距离的倒数）
-def evaluate(life):
-    dist = 0.0
-    for i in range(gene_length):
-        i1 = life.gene[i]
-        i2 = life.gene[(i + 1)%gene_length]
-        x1, y1, _ = citys[i1]
-        x2, y2, _ = citys[i2]
-        dist += math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
-    return 1.0 / max(1e-12, dist)
-    # return 1.0
+# 5) 初始化种群
+def create_individual():
+    """创建单个个体"""
+    return Individual(np.random.rand(N_CITIES))
 
-# 6) 主循环
-best_history = []
-best_value = 0
-best_gene = []
+population = [create_individual() for _ in range(POPULATION_SIZE)]
 
-for gen in range(MAX_GENERATIONS):
-    
-    new_lives = lives[:]
+# 6) 定义评估函数
+def evaluate_fitness(individual):
+    """计算路径长度并返回适应度（路径长度的倒数）"""
+    route = individual.rank
+    # 计算回路总距离
+    indices = np.append(route, route[0])
+    path_distances = distance_matrix[indices[:-1], indices[1:]]
+    total_distance = np.sum(path_distances)
+    return 1.0 / max(1e-12, total_distance)
 
-    # 计算适应度
-    for life in new_lives:
-        life.score = evaluate(life)
-        if life.score > best_value:
-            best_value = life.score
-            best_gene = life.gene
+# 7) 差分进化主循环
+convergence_history = []
+best_fitness = 0.0
+best_solution = None
 
-    # 保存最佳个体分数
-    best_history.append(1.0 / best_value)
-
-    # 更新速度
-    for life in new_lives:
-        R0 = np.random.randint(0, LIFE_COUNT)
-        R1 = 0
-        R2 = 0
-        u = [random.random() for _ in range(gene_length)]
-        while 1:
-            R1 = np.random.randint(0, LIFE_COUNT)
-            if R1 == R0:
-                continue
-            else:
-                break
-        while 1:
-            R2 = np.random.randint(0, LIFE_COUNT)
-            if R2 == R0 or R2 == R1:
-                continue
-            else:
-                break
+for generation in range(MAX_GENERATIONS):
+    # 评估当前种群
+    for individual in population:
+        individual.fitness = evaluate_fitness(individual)
         
-        jrand = np.random.randint(0,gene_length)
-
-
-        for j in range(gene_length) :
-            if random.random() <= Cr or j == jrand:
-                u[j] = life.x[j] + F * (lives[R1].x[j] - lives[R2].x[j])
-            else:
-                u[j] = life.x[j]
-
-        U = Life(u)
-        if evaluate(U) > evaluate(life):
-            life.x = u
-            life.gene = np.argsort(life.x)
-
+        # 更新全局最优解
+        if individual.fitness > best_fitness:
+            best_fitness = individual.fitness
+            best_solution = individual.rank.copy()
+    
+    # 记录当前最优距离
+    convergence_history.append(1.0 / best_fitness)
+    
+    # 创建新一代种群
+    new_population = []
+    
+    for target_idx, target in enumerate(population):
+        # 选择三个不同的随机个体
+        candidate_indices = [i for i in range(POPULATION_SIZE) if i != target_idx]
+        r0, r1, r2 = np.random.choice(candidate_indices, 3, replace=False)
+        
+        # 差分变异：v = x_r0 + F * (x_r1 - x_r2)
+        base_vector = population[r0].position
+        donor_vector = base_vector + SCALING_FACTOR * (
+            population[r1].position - population[r2].position
+        )
+        
+        # 二项式交叉
+        trial_vector = target.position.copy()
+        crossover_mask = np.random.rand(N_CITIES) < CROSSOVER_RATE
+        
+        # 确保至少有一个维度发生交叉
+        j_rand = np.random.randint(0, N_CITIES)
+        crossover_mask[j_rand] = True
+        
+        # 应用交叉
+        trial_vector[crossover_mask] = donor_vector[crossover_mask]
+        
+        # 创建试验个体并评估
+        trial_individual = Individual(trial_vector)
+        trial_fitness = evaluate_fitness(trial_individual)
+        
+        # 贪婪选择
+        if trial_fitness > target.fitness:
+            new_population.append(trial_individual)
+        else:
+            new_population.append(Individual(target.position.copy()))
+    
     # 更新种群
-    lives = new_lives[:]
+    population = new_population
+    
+    # 定期输出进度
+    if generation % 500 == 0:
+        current_best_distance = 1.0 / best_fitness
+        print(f"迭代 {generation:4d} 代，当前最优距离: {current_best_distance:.6f}")
 
-    if gen % 500 == 0:
-        print(f"经过了{gen}代之后，最优解为{ 1 / best_value}")
-
-# 7) 输出结果
-final_best_distance = 1.0 / best_value
-print(f"经过 {MAX_GENERATIONS} 次迭代，最优解距离为：{final_best_distance:.6f}")
+# 8) 输出结果
+final_distance = 1.0 / best_fitness
+print(f"\n经过 {MAX_GENERATIONS} 次迭代，最优解距离为：{final_distance:.6f}")
 print("遍历城市顺序为：")
-for idx in best_gene:
-    print(citys[idx][2], end=' -> ')
-print(citys[best_gene[0]][2])
+for idx in best_solution:
+    print(cities[idx][2], end=' -> ')
+print(cities[best_solution[0]][2])
 
-# 8) 可视化
-best_cycle = list(best_gene[:]) + list([best_gene[0]])
+# 9) 可视化
+best_cycle = np.append(best_solution, best_solution[0])
 
 # 保存收敛图
 plt.figure(figsize=(15, 15))
-plt.plot(best_history, 'r-', label='history_best')
-plt.xlabel('Iteration', fontsize=40)
-plt.ylabel('length', fontsize=40)
+plt.plot(convergence_history, 'r-', label='历史最优')
+plt.xlabel('迭代次数', fontsize=40)
+plt.ylabel('路径长度', fontsize=40)
 plt.legend(fontsize=40)
-plt.tick_params(axis='both',labelsize=40)
-# 保存收敛图单独文件
-plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\TSP_DE\\TSP_DE_convergence_history_NP={LIFE_COUNT}_generation={MAX_GENERATIONS}_Cr={Cr}_F={F}.pdf', dpi=500)
+plt.tick_params(axis='both', labelsize=40)
+plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\TSP_DE\\TSP_DE_收敛历史_种群大小={POPULATION_SIZE}_迭代数={MAX_GENERATIONS}_Cr={CROSSOVER_RATE}_F={SCALING_FACTOR}.pdf', dpi=500)
 plt.close()
 
 # 保存最优路径图
 plt.figure(figsize=(15, 15))
-xs = [citys[i][0] for i in best_cycle]
-ys = [citys[i][1] for i in best_cycle]
-plt.plot(xs, ys, 'g-')
-plt.plot(xs, ys, 'r.')
-for (x, y, name) in citys:
+x_coords = [cities[i][0] for i in best_cycle]
+y_coords = [cities[i][1] for i in best_cycle]
+plt.plot(x_coords, y_coords, 'g-', linewidth=2)
+plt.plot(x_coords, y_coords, 'r.', markersize=10)
+for (x, y, name) in cities:
     plt.text(x * 1.001, y * 1.001, name, fontsize=25)
-plt.xlabel('x', fontsize=40)
-plt.ylabel('y', fontsize=40)
-plt.tick_params(axis='both',labelsize=40)
-
-# 保存路径图单独文件
-plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\TSP_DE\\TSP_DE_best_path_NP={LIFE_COUNT}_generation={MAX_GENERATIONS}_Cr={Cr}_F={F}.pdf', dpi=500)
+plt.xlabel('X坐标', fontsize=40)
+plt.ylabel('Y坐标', fontsize=40)
+plt.tick_params(axis='both', labelsize=40)
+plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\TSP_DE\\TSP_DE_最优路径_种群大小={POPULATION_SIZE}_迭代数={MAX_GENERATIONS}_Cr={CROSSOVER_RATE}_F={SCALING_FACTOR}.pdf', dpi=500)
 plt.close()

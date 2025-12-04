@@ -34,158 +34,129 @@ MAX_GENERATIONS = 2000
 
 # 4) 初始化种群
 gene_length = len(citys)
-lives = []
 base = list(range(gene_length))
-for i in range(LIFE_COUNT):
-    g = base[:]
-    random.shuffle(g)
-    lives.append(Life(g))
+lives = [Life(random.sample(base, len(base))) for _ in range(LIFE_COUNT)]
 
 # 5) 定义评估函数（回路距离的倒数）
 def evaluate(life):
     dist = 0.0
     for i in range(gene_length):
-        i1 = life.gene[i]
-        i2 = life.gene[(i + 1)%gene_length]
+        i1, i2 = life.gene[i], life.gene[(i + 1) % gene_length]
         x1, y1, _ = citys[i1]
         x2, y2, _ = citys[i2]
-        dist += math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+        dist += math.hypot(x1 - x2, y1 - y2)
     return 1.0 / max(1e-12, dist)
+
+def pmx_crossover(parent1, parent2, a, b):
+    """部分映射交叉"""
+    child1, child2 = parent1.gene[:], parent2.gene[:]
+    
+    for j in range(a, b + 1):
+        fa, fb = child1[j], child2[j]
+        
+        # 交换两个位置的基因
+        idx1, idx2 = child1.index(fb), child2.index(fa)
+        child1[idx1], child2[idx2] = fa, fb
+        child1[j], child2[j] = fb, fa
+    
+    return Life(child1), Life(child2)
+
+def ox_crossover(parent1, parent2, a, b):
+    """顺序交叉"""
+    list1, list2 = parent1.gene[a:b], parent2.gene[a:b]
+    
+    left1 = [x for x in parent2.gene if x not in list1]
+    left2 = [x for x in parent1.gene if x not in list2]
+    
+    return Life(left1[:a] + list1 + left1[a:]), Life(left2[:a] + list2 + left2[a:])
+
+def swap_mutation(gene):
+    """交换变异"""
+    a, b = random.sample(range(gene_length), 2)
+    gene[a], gene[b] = gene[b], gene[a]
+    return gene
+
+def reverse_mutation(gene):
+    """反序变异"""
+    a, b = sorted(random.sample(range(gene_length), 2))
+    gene[a:b] = reversed(gene[a:b])
+    return gene
+
+def insert_mutation(gene):
+    """插入变异"""
+    a, b = random.sample(range(gene_length), 2)
+    c = gene.pop(b)
+    gene.insert(a, c)
+    return gene
 
 # 6) GA 主循环
 best_history = []
 best = None
 
 for gen in range(MAX_GENERATIONS):
-    new_lives = lives[:]
-
-    next_lives = []
-    # 计算适应度
-    best_score = 0
-    sum_score = 0
-    for life in new_lives:
+    # 计算适应度并找到最优个体
+    for life in lives:
         life.score = evaluate(life)
-        sum_score += life.score
-        if life.score > best_score:
-            best_score = life.score
-
-    best_history.append(1.0 / best_score)
-    # 保留最优个体
-    for life in new_lives:
-        if life.score == best_score:
-            best = life
-
-    # 选择
+    
+    # 获取当前最优个体
+    current_best = max(lives, key=lambda x: x.score)
+    best_history.append(1.0 / current_best.score)
+    
+    # 更新全局最优
+    if best is None or current_best.score > best.score:
+        best = Life(current_best.gene[:])
+    
+    # 选择 - 轮盘赌
+    sum_score = sum(life.score for life in lives)
     selected_lives = []
-    for j in range(int(LIFE_COUNT * CROSS_RATE )):
-        i = 0
-        random_num = random.uniform(0, sum_score)
-        for life in new_lives:
-            i += life.score
-            if random_num < i :
+    
+    for _ in range(int(LIFE_COUNT * CROSS_RATE)):
+        r = random.uniform(0, sum_score)
+        cumulative = 0
+        for life in lives:
+            cumulative += life.score
+            if cumulative > r:
                 selected_lives.append(Life(life.gene[:]))
                 break
     
     # 交配
-    mated_lives =[]
-    while len(selected_lives) >1 :
-        o = random.randint(0,2)
-        
+    mated_lives = []
+    random.shuffle(selected_lives)
+    
+    while len(selected_lives) >= 2:
         parent1 = selected_lives.pop()
         parent2 = selected_lives.pop()
-
-        a = random.randint(0,33)
-        b = random.randint(0,33)
-
-        if a > b:   # 确保a小于b
-            t = a
-            a = b
-            b = t
-
-        # 进行部分映射交叉（1/3）的概率
-        if o == 1:
-
-            for j in range(a, b+1):
-                fa = parent1.gene[j] 
-                fb = parent2.gene[j]
-                for i in range(0,gene_length):
-                    if parent1.gene[i] == fb:
-                        parent1.gene[i] = fa
-                parent1.gene[j] = fb
-                for i in range(0,gene_length):
-                    if parent2.gene[i] == fa:
-                        parent2.gene[i] = fb
-                parent2.gene[j] = fa
-            
-        # 进行顺序交叉
-        else:
-            list1 = parent1.gene[a:b]
-            list2 = parent2.gene[a:b]
-            left_list1 = [x for x in parent2.gene if x not in list1]
-            left_list2 = [x for x in parent1.gene if x not in list2]
-
-            parent1.gene = left_list1[:a] + list1 + left_list1[a:]
-            parent2.gene = left_list2[:a] + list2 + left_list2[a:]
-
-        mated_lives.append(parent1)
-        mated_lives.append(parent2)
-
-
+        a, b = sorted(random.sample(range(gene_length), 2))
+        
+        if random.random() < 0.33:  # 部分映射交叉
+            child1, child2 = pmx_crossover(parent1, parent2, a, b)
+        else:  # 顺序交叉
+            child1, child2 = ox_crossover(parent1, parent2, a, b)
+        
+        mated_lives.extend([child1, child2])
+    
     # 变异
     for life in mated_lives:
-        k = random.random()
-        if k < MUTATION_RATE:
-            t = random.randint(1,3)
-            # 交换变异
-            if t == 1:
-                a = random.randint(0,33)
-                b = random.randint(0,33)
-                t = life.gene[a]
-                life.gene[a] = life.gene[b]
-                life.gene[b] = t
-            # 反序变异
-            if t == 2:
-                a = random.randint(0,33)
-                b = random.randint(0,33)
-                list1 = life.gene[a:b]
-                list1.reverse()
-                life.gene[a:b] = list1
-            # 插入变异
-            if t == 3:
-                a = random.randint(0,33)
-                b = random.randint(0,33)
-                c = life.gene.pop(b)
-                life.gene.insert(a,c)
+        if random.random() < MUTATION_RATE:
+            mutation_type = random.choice(['swap', 'reverse', 'insert'])
+            
+            if mutation_type == 'swap':
+                life.gene = swap_mutation(life.gene[:])
+            elif mutation_type == 'reverse':
+                life.gene = reverse_mutation(life.gene[:])
+            else:
+                life.gene = insert_mutation(life.gene[:])
     
-        
-    # 重新评估适应度
-    for life in mated_lives:
-        life.score = evaluate(life)
-        sum_score += life.score
-
-    # # 使用轮盘赌更新个体
-    # next_lives.append(Life(best.gene[:])) # 这是之前保留的最佳个体
-    # new_lives += mated_lives    # 合并父子代，取得
-    # for j in range(LIFE_COUNT - 1 ):
-    #     i = 0
-    #     random_num = random.uniform(0, sum_score)
-    #     for life in new_lives:
-    #         i += life.score
-    #         if random_num < i :
-    #             next_lives.append(Life(life.gene[:]))
-    #             break
-
-    # 使用锦标赛更新个体
-    next_lives.append(Life(best.gene[:])) # 这是之前保留的最佳个体
-    new_lives += mated_lives
-    for j in range(LIFE_COUNT - 1 ):
-        a, b = random.sample(new_lives,k = 2)
-        if a.score > b.score :
-            next_lives.append(Life(a.gene[:]))
-        else:
-            next_lives.append(Life(b.gene[:]))
+    # 锦标赛选择生成下一代
+    next_lives = [Life(best.gene[:])]  # 保留最优个体
+    
+    for _ in range(LIFE_COUNT - 1):
+        a, b = random.sample(lives + mated_lives, 2)
+        winner = a if a.score > b.score else b
+        next_lives.append(Life(winner.gene[:]))
+    
     # 更新种群
-    lives = next_lives[:]
+    lives = next_lives
 
 # 7) 输出结果
 final_best_distance = 1.0 / best.score
@@ -196,7 +167,7 @@ for idx in best.gene:
 print(citys[best.gene[0]][2])
 
 # 8) 可视化
-best_cycle = list(best.gene[:]) + list([best.gene[0]])
+best_cycle = best.gene[:] + [best.gene[0]]
 
 # 保存收敛图
 plt.figure(figsize=(15, 15))
