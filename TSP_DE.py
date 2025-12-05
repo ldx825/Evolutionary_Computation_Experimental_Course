@@ -22,7 +22,7 @@ random.seed(SEED)
 np.random.seed(SEED)
 
 # 2) 读取城市坐标（文件每行：城市名 \t x \t y）
-CITY_FILE = "D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\distanceMatrix.txt"
+CITY_FILE = "D:\\大二上-吉大相关\\演化计算代码作业\\Evolutionary_Computation_Experimental_Course\\distanceMatrix.txt"
 citys = []
 with open(CITY_FILE, "r", encoding='utf-8') as f:
     for line in f:
@@ -37,8 +37,10 @@ LIFE_COUNT = 120
 MAX_GENERATIONS = 2000
 # MAX_GENERATIONS = 1
 Cr = 0.9
+# 消融实验
 # Cr = 0.0
 F = 0.6
+# 消融实验
 # F = 0.0
 
 gene_length = len(citys)
@@ -87,13 +89,13 @@ for gen in range(MAX_GENERATIONS):
         R1 = 0
         R2 = 0
         u = [random.random() for _ in range(gene_length)]
-        while 1:
+        while True:
             R1 = np.random.randint(0, LIFE_COUNT)
             if R1 == R0:
                 continue
             else:
                 break
-        while 1:
+        while True:
             R2 = np.random.randint(0, LIFE_COUNT)
             if R2 == R0 or R2 == R1:
                 continue
@@ -110,7 +112,12 @@ for gen in range(MAX_GENERATIONS):
                 u[j] = life.x[j]
 
         U = Life(u)
-        if evaluate(U) > evaluate(life):
+
+        # if evaluate(U) > evaluate(life):
+        #     life.x = u
+        #     life.gene = np.argsort(life.x)
+        # 消融实验：完全随机选择
+        if random.random() < 0.5:
             life.x = u
             life.gene = np.argsort(life.x)
 
@@ -139,7 +146,7 @@ plt.ylabel('length', fontsize=40)
 plt.legend(fontsize=40)
 plt.tick_params(axis='both',labelsize=40)
 # 保存收敛图单独文件
-plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\TSP_DE\\TSP_DE_convergence_history_NP={LIFE_COUNT}_generation={MAX_GENERATIONS}_Cr={Cr}_F={F}.pdf', dpi=500)
+plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\Evolutionary_Computation_Experimental_Course\\TSP_DE\\Ablation_TSP_DE_convergence_history_NP={LIFE_COUNT}_generation={MAX_GENERATIONS}_Cr={Cr}_F={F}.pdf', dpi=500)
 plt.close()
 
 # 保存最优路径图
@@ -155,5 +162,5 @@ plt.ylabel('y', fontsize=40)
 plt.tick_params(axis='both',labelsize=40)
 
 # 保存路径图单独文件
-plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\TSP_DE\\TSP_DE_best_path_NP={LIFE_COUNT}_generation={MAX_GENERATIONS}_Cr={Cr}_F={F}.pdf', dpi=500)
+plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\Evolutionary_Computation_Experimental_Course\\TSP_DE\\Ablation_TSP_DE_best_path_NP={LIFE_COUNT}_generation={MAX_GENERATIONS}_Cr={Cr}_F={F}.pdf', dpi=500)
 plt.close()
