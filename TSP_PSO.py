@@ -15,7 +15,12 @@ class Life(object):
     def __init__(self, x=None):
         self.x = np.array(x)
         self.gene = np.argsort(x)
-        self.v = np.zeros_like(x)
+        # self.v = np.zeros_like(x)
+        # 消融实验：速度的初始化!
+        if x is not None:
+            self.v = np.random.uniform(-0.5, 0.5, size=len(x))
+        else:
+            self.v = np.array([])  # 或 np.zeros(0)
         self.pbest = self.x.copy()
         self.score = score_init
         self.pbest_score = self.score
@@ -27,7 +32,7 @@ np.random.seed(SEED)
 
 # 2) 读取城市坐标（文件每行：城市名 \t x \t y）
 # CITY_FILE = "cn34.txt"
-CITY_FILE = "D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\distanceMatrix.txt"
+CITY_FILE = "D:\\大二上-吉大相关\\演化计算代码作业\\Evolutionary_Computation_Experimental_Course\\distanceMatrix.txt"
 citys = []
 with open(CITY_FILE, "r", encoding='utf-8') as f:
     for line in f:
@@ -40,9 +45,15 @@ with open(CITY_FILE, "r", encoding='utf-8') as f:
 # 3) 定义超参数
 LIFE_COUNT = 200
 MAX_GENERATIONS = 5000
+# 消融实验：
 C1 = 2.5
+# C1 = 0.0
 C2 = 1.0
+# 消融实验：
+# C2 = 0.0
 V_MAX = 2.0
+# 消融实验：速度没有限制！
+# V_MAX = float('inf')
 gene_length = len(citys)
 
 # 4) 初始化种群
@@ -88,6 +99,9 @@ for gen in range(MAX_GENERATIONS):
         R1 = np.random.rand(gene_length)
         R2 = np.random.rand(gene_length)
         W = 0.9  - 0.2 * gen / MAX_GENERATIONS
+        # 消融实验：完全没有惯性信息！！
+        # W = 0.0
+        # W = 0.8
         life.v = W * life.v + C1 * R1 * (life.pbest - life.x)  + C2 * R2 *  (gbest.x - life.x)
         life.v = np.clip(life.v, -V_MAX, V_MAX)
         life.x = life.v +life.x
@@ -95,7 +109,7 @@ for gen in range(MAX_GENERATIONS):
     # 我们的x现在是连续的，我们要将之合理的转化为离散的序列
     # 转化为合理的gene(x)
     for life in new_lives:
-        life.gene = np.argsort( life.x )
+        life.gene = np.argsort(life.x)
 
     # 更新种群
     lives = new_lives[:]
@@ -119,7 +133,7 @@ plt.ylabel('length', fontsize=40)
 plt.legend(fontsize=40)
 plt.tick_params(axis='both', labelsize=40)
 # 保存收敛图单独文件
-plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\TSP_PSO\\TSP_PSO_convergence_history_Particles={LIFE_COUNT}_generation={MAX_GENERATIONS}_v_max={V_MAX}_c_1={C1}_c_2={C2}.pdf', dpi=500)
+plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\Evolutionary_Computation_Experimental_Course\\TSP_PSO\\Ablation_TSP_PSO_convergence_history_Particles={LIFE_COUNT}_generation={MAX_GENERATIONS}_v_max={V_MAX}_c_1={C1}_c_2={C2}.pdf', dpi=500)
 plt.close()
 
 # 保存最优路径图
@@ -135,5 +149,5 @@ plt.ylabel('y', fontsize=40)
 plt.tick_params(axis='both', labelsize=40)
 
 # 保存路径图单独文件
-plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\TSP_all\\TSP_PSO\\TSP_PSO_best_path_Particles={LIFE_COUNT}_generation={MAX_GENERATIONS}_v_max={V_MAX}_c_1={C1}_c_2={C2}.pdf', dpi=500)
+plt.savefig(f'D:\\大二上-吉大相关\\演化计算代码作业\\Evolutionary_Computation_Experimental_Course\\TSP_PSO\\Ablation_TSP_PSO_best_path_Particles={LIFE_COUNT}_generation={MAX_GENERATIONS}_v_max={V_MAX}_c_1={C1}_c_2={C2}.pdf', dpi=500)
 plt.close()
